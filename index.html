@@ -77,4 +77,11 @@ $('hudGps').onclick=()=>$('followBtn').click();
 const previousStop=$('stopRec').onclick;$('stopRec').onclick=()=>{previousStop();$('hudPause').textContent='▶ Iniciar'};
 const previousStart=$('startRec').onclick;$('startRec').onclick=()=>{previousStart();$('hudPause').textContent='Ⅱ Pausar'};
 const previousUpdate=updateRec;updateRec=function(){previousUpdate();$('hudTime').textContent=$('elapsed').textContent};
+
+let directionArrows=L.layerGroup().addTo(map);
+const prevBuild=rebuildNavigation;
+rebuildNavigation=function(){prevBuild();directionArrows.clearLayers();if(navPath.length<2)return;
+for(let target=350;target<navDistance;target+=650){let j=navCumulative.findIndex(v=>v>=target);if(j<1)continue;let a=navPath[j-1],b=navPath[j],t=(target-navCumulative[j-1])/(navCumulative[j]-navCumulative[j-1]||1),lat=a.lat+(b.lat-a.lat)*t,lon=a.lon+(b.lon-a.lon)*t,angle=Math.atan2((b.lon-a.lon)*Math.cos(rad(lat)),b.lat-a.lat)*180/Math.PI;
+L.marker([lat,lon],{interactive:false,icon:L.divIcon({className:'',html:'<div style="transform:rotate('+angle+'deg);color:#fff;background:#f43f5e;border:2px solid #fff;border-radius:100%;width:27px;height:27px;text-align:center;line-height:22px;font-size:19px;font-weight:800;box-shadow:0 2px 6px #0008">↑</div>',iconSize:[27,27],iconAnchor:[13,13]})}).addTo(directionArrows);
+}};
 </script></body></html>
