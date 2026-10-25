@@ -8,10 +8,10 @@
 #navConfig{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:9px 13px;background:#1b2b42}
 #navConfig button{font-size:12px}#chooseStart.active{background:#eab308;color:#172338}
 #navMapShell{position:relative}#navHud{display:none}
-#navMapShell.immersive{position:fixed;inset:0;z-index:9999;background:#101827}
+#navMapShell.immersive{position:fixed;inset:0;z-index:9999;isolation:isolate;background:#101827}
 #navMapShell.immersive #map{height:100dvh!important;width:100%;min-height:0}
 #navMapShell.immersive #navHud{display:flex}
-#navHud{pointer-events:none;position:absolute;inset:0;flex-direction:column;justify-content:space-between;padding:calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 14px)}
+#navHud{pointer-events:none;position:absolute;inset:0;z-index:1800;flex-direction:column;justify-content:space-between;padding:calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 14px)}
 #navHud button{pointer-events:auto;box-shadow:0 2px 12px #0008}
 .hudRow{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.hudCard{background:#101827e8;border:1px solid #ffffff55;border-radius:14px;padding:12px;min-width:105px;backdrop-filter:blur(8px);text-align:center}.hudCard strong{font-size:24px;display:block}.hudCard small{font-size:11px;color:#cbd5e1}.hudHill{display:flex;align-items:center;gap:10px}.hudHill .arrow{font-size:38px;font-weight:800}.hudBottom{display:flex;flex-direction:column;gap:10px}.hudBottom .toolbar{justify-content:center}.hudClock{font-variant-numeric:tabular-nums}
 </style></head><body><main>
@@ -69,7 +69,7 @@ $('invert').onclick=()=>{if(!selected){status('Selecciona una ruta primero');ret
 $('startHere').onclick=()=>{if(!selected){status('Selecciona una ruta primero');return}if(!lastFix){startGPS();status('Esperando la primera posición GPS para seleccionar inicio. Pulsa de nuevo cuando aparezca.');return}navStart=nearIndex({lat:lastFix.lat,lng:lastFix.lon},navOriginal);rebuildNavigation();status('Inicio elegido cerca de tu posición GPS.')};
 const prevFix=fix;fix=function(pos){prevFix(pos);updateNavHUD(lastFix)};
 function updateNavHUD(p){if(!selected||!navPath.length){$('hudArrow').textContent='→';$('hudSlope').textContent='Sin ruta';return}let index=0;if(p)index=nearIndex({lat:p.lat,lng:p.lon},navPath);let done=navCumulative[index]||0;let remaining=Math.max(0,navDistance-done);$('hudDone').textContent=(done/1000).toFixed(2);$('hudRemain').textContent=(remaining/1000).toFixed(2);let here=navPath[index],aheadIndex=index;while(aheadIndex<navPath.length-1&&navCumulative[aheadIndex]-done<500)aheadIndex++;let end=navPath[aheadIndex];if(here&&end&&Number.isFinite(here.ele)&&Number.isFinite(end.ele)){let delta=end.ele-here.ele;$('hudArrow').textContent=delta>5?'↗':delta< -5?'↘':'→';$('hudSlope').textContent=delta>5?'Subida +'+Math.round(delta)+' m':delta< -5?'Bajada '+Math.round(delta)+' m':'Llano'}else{$('hudArrow').textContent='?';$('hudSlope').textContent='Sin altitud'}}
-function immersive(on){$('navMapShell').classList.toggle('immersive',on);document.body.style.overflow=on?'hidden':'';setTimeout(()=>{map.invalidateSize();if(on&&lastFix)map.panTo([lastFix.lat,lastFix.lon])},100)}
+function immersive(on){$('navMapShell').classList.toggle('immersive',on);document.body.style.overflow=on?'hidden':'';if(on){$('navHud').style.display='flex'}else{$('navHud').style.display='none'}setTimeout(()=>{map.invalidateSize();if(on&&lastFix)map.panTo([lastFix.lat,lastFix.lon])},100)}
 $('fullmap').onclick=()=>immersive(true);$('exitFull').onclick=()=>immersive(false);
 function pauseRec(){if(!recording)return;recording.paused=!recording.paused;if(recording.paused)recording.pausedAt=Date.now();else recording.pauseMs+=(Date.now()-recording.pausedAt);$('hudPause').textContent=recording.paused?'▶ Reanudar':'Ⅱ Pausar';status(recording.paused?'Actividad en pausa':'Actividad reanudada')}
 $('hudPause').onclick=()=>{if(!recording){$('startRec').click();$('hudPause').textContent='Ⅱ Pausar'}else pauseRec()};
@@ -81,7 +81,7 @@ const previousUpdate=updateRec;updateRec=function(){previousUpdate();$('hudTime'
 let directionArrows=L.layerGroup().addTo(map);
 const prevBuild=rebuildNavigation;
 rebuildNavigation=function(){prevBuild();directionArrows.clearLayers();if(navPath.length<2)return;
-for(let target=350;target<navDistance;target+=650){let j=navCumulative.findIndex(v=>v>=target);if(j<1)continue;let a=navPath[j-1],b=navPath[j],t=(target-navCumulative[j-1])/(navCumulative[j]-navCumulative[j-1]||1),lat=a.lat+(b.lat-a.lat)*t,lon=a.lon+(b.lon-a.lon)*t,angle=Math.atan2((b.lon-a.lon)*Math.cos(rad(lat)),b.lat-a.lat)*180/Math.PI;
-L.marker([lat,lon],{interactive:false,icon:L.divIcon({className:'',html:'<div style="transform:rotate('+angle+'deg);color:#fff;background:#f43f5e;border:2px solid #fff;border-radius:100%;width:27px;height:27px;text-align:center;line-height:22px;font-size:19px;font-weight:800;box-shadow:0 2px 6px #0008">↑</div>',iconSize:[27,27],iconAnchor:[13,13]})}).addTo(directionArrows);
+for(let target=700;target<navDistance;target+=1250){let j=navCumulative.findIndex(v=>v>=target);if(j<1)continue;let a=navPath[j-1],b=navPath[j],t=(target-navCumulative[j-1])/(navCumulative[j]-navCumulative[j-1]||1),lat=a.lat+(b.lat-a.lat)*t,lon=a.lon+(b.lon-a.lon)*t,angle=Math.atan2((b.lon-a.lon)*Math.cos(rad(lat)),b.lat-a.lat)*180/Math.PI;
+L.marker([lat,lon],{interactive:false,icon:L.divIcon({className:'',html:'<div style="transform:rotate('+angle+'deg);color:#fff;background:#f43f5e;border:1px solid #fff;border-radius:100%;width:17px;height:17px;text-align:center;line-height:15px;font-size:13px;font-weight:700;box-shadow:0 1px 3px #0007">↑</div>',iconSize:[17,17],iconAnchor:[8,8]})}).addTo(directionArrows);
 }};
 </script></body></html>
