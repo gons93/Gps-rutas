@@ -1,0 +1,19 @@
+{
+  "name": "gps-rutas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Visor GPS de rutas para web y Android",
+  "scripts": {
+    "build": "node scripts/build-web.mjs",
+    "android:init": "npm run build && npx cap add android",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/android": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0"
+  }
+}
