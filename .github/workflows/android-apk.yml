@@ -69,7 +69,16 @@ jobs:
               }
           ''')
           main.write_text(src)
-          print('Iconos instalados y FLAG_KEEP_SCREEN_ON activo.')
+          manifest=Path('android/app/src/main/AndroidManifest.xml')
+          xml=manifest.read_text()
+          marker='<application'
+          assert marker in xml, 'No se encontró application en AndroidManifest'
+          permissions=('android.permission.ACCESS_FINE_LOCATION','android.permission.ACCESS_COARSE_LOCATION')
+          declarations=''.join(f'    <uses-permission android:name="{p}" />\\n' for p in permissions if p not in xml)
+          xml=xml.replace(marker,declarations+'    '+marker,1)
+          manifest.write_text(xml)
+          print('Iconos, permisos GPS y FLAG_KEEP_SCREEN_ON preparados.')
+
           PY
       - name: Compilar APK
         working-directory: android
