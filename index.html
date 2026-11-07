@@ -4,6 +4,12 @@
 <style>
 *{box-sizing:border-box}body{margin:0;background:#101827;color:#f1f5fa;font:14px system-ui,Arial,sans-serif}header{padding:11px 13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#162338}h1{font-size:18px;margin:0;flex:1;min-width:115px}button,.filebtn,select{border:0;border-radius:9px;padding:10px 12px;color:white;background:#2563eb;font:600 13px system-ui;cursor:pointer}button.secondary,.filebtn,select{background:#334155}button.warn{background:#b91c1c}button:disabled{opacity:.45}input[type=file]{display:none}main{max-width:1100px;margin:auto}#map{height:46dvh;min-height:280px;background:#243040}section{background:#162338;border-radius:12px;margin:9px;padding:12px}section h2{font-size:15px;margin:0 0 10px}.toolbar{display:flex;gap:7px;flex-wrap:wrap;align-items:center}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}.metric{padding:8px 3px;background:#223148;border-radius:9px}.metric strong{display:block;font-size:17px}.metric small{font-size:11px;color:#b8cadd}.muted{color:#b8cadd;font-size:12px}.status{padding:8px 13px;min-height:35px;color:#d8e7f5}.blue-dot{width:17px;height:17px;border:3px solid white;border-radius:50%;background:#2588ff;box-shadow:0 0 0 7px #2588f44d}.profile{height:120px;width:100%;display:block;background:#1d2c41;border-radius:8px;touch-action:pan-y}.route-row,.activity-row{padding:8px 0;border-bottom:1px solid #344052;display:flex;gap:9px;align-items:center}.route-row:last-child,.activity-row:last-child{border:0}.grow{flex:1;min-width:0}.grow strong{display:block;overflow-wrap:anywhere}.mini{padding:7px 9px;font-size:12px}#recnotice{display:none;color:#fca5a5;font-weight:700}.two{display:grid;grid-template-columns:1fr 1fr;gap:6px}#elevationNote{margin-top:6px}a{color:#91beff}@media(min-width:800px){#map{height:55dvh}.twocol{display:grid;grid-template-columns:1fr 1fr}.metrics{grid-template-columns:repeat(6,1fr)}}
 
+/* Evitar que la barra de estado Android tape el encabezado de la APK */
+html.native-app header{padding-top:calc(12px + max(32px,env(safe-area-inset-top,0px)));padding-left:16px;padding-right:16px}
+html.native-app #navConfig{padding-top:12px}
+html.native-app #navHud{padding-top:calc(max(34px,env(safe-area-inset-top,0px)) + 10px);padding-bottom:calc(max(20px,env(safe-area-inset-bottom,0px)) + 12px)}
+@media(max-width:540px){header h1{min-width:100%;flex-basis:100%;font-size:19px}header{gap:8px}header button,header .filebtn{flex:1;text-align:center}#navConfig button{flex:1 1 auto}}
+
 /* Pantalla de navegación */
 #navConfig{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:9px 13px;background:#1b2b42}
 #navConfig button{font-size:12px}#chooseStart.active{background:#eab308;color:#172338}
@@ -44,6 +50,7 @@
 <section><h2>🏁 Actividades anteriores</h2><div id="activities" class="muted">No hay salidas guardadas.</div></section>
 </main><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>
 'use strict';
+if(window.Capacitor?.isNativePlatform?.() || location.protocol==='capacitor:' || location.hostname==='localhost'&&location.protocol==='https:')document.documentElement.classList.add('native-app');
 const $=id=>document.getElementById(id),map=L.map('map').setView([40.503,-3.53],13);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(map);
 let routes=read('gps-rutas-v2',[]),activities=read('gps-activities-v2',[]),selected=null,routeLine=null,recordLine=null,marker=null,accuracyCircle=null,watch=null,follow=false,recording=null,lastFix=null;
@@ -124,12 +131,17 @@ const TRACK_41='https://www.grupoamadablan.org/storage/tracks_gpx/pr-m_41_laguna
 const TRACK_40='https://www.grupoamadablan.org/storage/tracks_gpx/pr-m_40_circular_paracuellos_de_jarama.gpx';
 async function fetchTrack(url){let response;try{response=await fetch(url,{mode:'cors'})}catch(e){throw Error('El servidor externo ha bloqueado la descarga desde esta web (CORS o conexión).')}if(!response.ok)throw Error('No se pudo descargar el GPX: HTTP '+response.status);const paths=parseGPX(await response.text());return paths.flat()}
 // Las rutas importadas por el usuario están en localStorage. No requieren permisos CORS.
-function savedTrack(number){
+async function savedTrack(number){
   const rx=new RegExp('(?:pr[\\s_.-]*m[\\s_.-]*'+number+'|prm[\\s_.-]*'+number+')','i');
-  const matches=routes.filter(r=>r.paths?.length&&rx.test(r.name));
-  const original=matches.find(r=>!/ampliad/i.test(r.name));
-  if(!original)throw Error('No encuentro la PR-M '+number+' en «Mis rutas guardadas» de este navegador. Impórtala antes de pulsar Añadir.');
-  return original.paths.flat();
+  const existing=routes.find(r=>r.paths?.length&&rx.test(r.name)&&!/ampliad/i.test(r.name));
+  if(existing)return existing.paths.flat();
+  return await bundledTrack('tracks/pr-m-'+number+'.gpx');
+}
+async function bundledTrack(path){
+  let response;
+  try{response=await fetch(path,{cache:'no-store'})}catch(err){throw Error('No se pudo leer la ruta incluida en la aplicación.')}
+  if(!response.ok)throw Error('La ruta no está incluida en esta versión de la app ('+path+'). Instala la última APK o importa el GPX.');
+  return parseGPX(await response.text()).flat();
 }
 function createBelvisExtension(a,b){
   if(a.length<20||b.length<20)throw Error('Uno de los GPX guardados no tiene suficientes puntos.');
@@ -172,7 +184,33 @@ function createBelvisExtension(a,b){
   if(total<13000||total>25000)throw Error('La longitud calculada no es la esperada ('+(total/1000).toFixed(2)+' km).');
   return [combined];
 }
-const suggested=[{name:'PR-M 41 ampliada · Lagunas + ribera del Jarama',kind:'belvis-extension',source:'https://www.grupoamadablan.org/rutas_detalle/160/lagunas-y-belvis-del-jarama'},{name:'PR-M 41 · Lagunas y Belvís del Jarama',url:'https://grupoamadablan.org/storage/tracks_gpx/pr-m_41_lagunas_belvis_jarama.gpx',source:'https://grupoamadablan.org/rutas_detalle/160/lagunas-y-belvis-del-jarama'},{name:'Arco Verde · Vega del Jarama',url:'https://www.comunidad.madrid/docs/2026-05/rl1-v2.gpx',source:'https://www.comunidad.madrid/medio-ambiente/arco-verde'}];
-function renderSuggested(){let el=$('suggestedRoutes');el.innerHTML='';suggested.forEach(item=>{const row=document.createElement('div');row.className='route-row';row.innerHTML='<div class="grow"><strong>'+item.name+'</strong><span class="muted">'+(item.kind==='belvis-extension'?'Usa tus PR-M 41 y PR-M 40 guardadas · sin descarga externa · revisar el enlace':'Ruta externa · archivo GPX original')+'</span></div><button class="mini" type="button">Añadir</button><a class="mini" target="_blank" rel="noopener noreferrer" href="'+item.source+'">Fuente</a>';row.querySelector('button').onclick=async()=>{let button=row.querySelector('button');button.disabled=true;button.textContent='Cargando…';try{status('Preparando «'+item.name+'»…');let paths=item.kind==='belvis-extension'?createBelvisExtension(savedTrack(41),savedTrack(40)):await fetchTrack(item.url).then(p=>[p]);if(routes.some(r=>r.name===item.name)){status('Esta ruta ya figura en tu biblioteca.');return}let route={id:'recommended-'+Date.now()+'-'+Math.random(),name:item.name,paths};routes.unshift(route);if(persist()){renderRoutes();showRoute(route.id);status('Ruta añadida: '+item.name)}}catch(err){status('No se pudo añadir «'+item.name+'»: '+err.message);alert('No se pudo añadir la ruta:\n'+err.message);if(item.url&&confirm('¿Abrir el GPX original para descargarlo manualmente?'))window.open(item.url,'_blank','noopener,noreferrer')}finally{button.disabled=false;button.textContent='Añadir'}};el.appendChild(row)})}
+const suggested=[
+ {name:'PR-M 41 ampliada · Lagunas + ribera del Jarama',kind:'belvis-extension',source:'https://www.grupoamadablan.org/rutas_detalle/160/lagunas-y-belvis-del-jarama'},
+ {name:'PR-M 41 · Lagunas y Belvís del Jarama',kind:'bundled',path:'tracks/pr-m-41.gpx',source:'https://www.grupoamadablan.org/rutas_detalle/160/lagunas-y-belvis-del-jarama'},
+ {name:'PR-M 40 · Circular Paracuellos de Jarama',kind:'bundled',path:'tracks/pr-m-40.gpx',source:'https://www.grupoamadablan.org/rutas_detalle/159/rutas'},
+ {name:'Arco Verde · Vega del Jarama',kind:'bundled',path:'tracks/arco-verde.gpx',source:'https://www.comunidad.madrid/medio-ambiente/arco-verde'}
+];
+function renderSuggested(){
+ const el=$('suggestedRoutes');el.innerHTML='';
+ suggested.forEach(item=>{
+  const row=document.createElement('div');row.className='route-row';
+  row.innerHTML='<div class="grow"><strong>'+safe(item.name)+'</strong><span class="muted">'+(item.kind==='belvis-extension'?'Ampliación por ribera basada en PR-M 41 + PR-M 40 · revisa el trazado':'GPX incluido en la APK · sin descargas externas')+'</span></div><button class="mini" type="button">Añadir</button><a class="mini" target="_blank" rel="noopener noreferrer" href="'+item.source+'">Fuente</a>';
+  row.querySelector('button').onclick=async()=>{
+   const btn=row.querySelector('button');btn.disabled=true;btn.textContent='Cargando…';
+   try{
+    if(routes.some(r=>r.name===item.name)){status('Esta ruta ya está guardada.');return}
+    status('Preparando «'+item.name+'»…');
+    const paths=item.kind==='belvis-extension'
+      ?createBelvisExtension(await savedTrack(41),await savedTrack(40))
+      :[await bundledTrack(item.path)];
+    const route={id:'recommended-'+Date.now()+'-'+Math.random(),name:item.name,paths};
+    routes.unshift(route);
+    if(persist()){renderRoutes();showRoute(route.id);status('Ruta añadida: '+item.name)}
+   }catch(err){status('No se pudo añadir «'+item.name+'»: '+err.message);alert('No se pudo añadir la ruta:\\n'+err.message)}
+   finally{btn.disabled=false;btn.textContent='Añadir'}
+  };
+  el.appendChild(row);
+ });
+}
 renderSuggested();
 </script><script type="module" src="./community.js"></script></body></html>
