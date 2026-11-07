@@ -154,7 +154,7 @@ function createBelvisExtension(a,b){
   const extension=best.out.slice(1);
   const combined=a.slice(0,i+1).concat([best.out[0]],extension,extension.slice().reverse(),[best.out[0]],a.slice(i+1));
   const total=analyze([combined]).km;
-  if(total<13||total>25)throw Error('La longitud calculada no es la esperada ('+total.toFixed(1)+' km).');
+  if(total<13000||total>25000)throw Error('La longitud calculada no es la esperada ('+(total/1000).toFixed(2)+' km).');
   return [combined];
 }
 const suggested=[{name:'PR-M 41 ampliada · Lagunas + ribera del Jarama',kind:'belvis-extension',source:'https://www.grupoamadablan.org/rutas_detalle/160/lagunas-y-belvis-del-jarama'},{name:'PR-M 41 · Lagunas y Belvís del Jarama',url:'https://grupoamadablan.org/storage/tracks_gpx/pr-m_41_lagunas_belvis_jarama.gpx',source:'https://grupoamadablan.org/rutas_detalle/160/lagunas-y-belvis-del-jarama'},{name:'Arco Verde · Vega del Jarama',url:'https://www.comunidad.madrid/docs/2026-05/rl1-v2.gpx',source:'https://www.comunidad.madrid/medio-ambiente/arco-verde'}];
