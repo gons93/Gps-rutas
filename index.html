@@ -103,7 +103,45 @@ for(let target=700;target<navDistance;target+=1250){let j=navCumulative.findInde
 L.marker([lat,lon],{interactive:false,icon:L.divIcon({className:'',html:'<div style="transform:rotate('+angle+'deg);color:#fff;background:#f43f5e;border:1px solid #fff;border-radius:100%;width:17px;height:17px;text-align:center;line-height:15px;font-size:13px;font-weight:700;box-shadow:0 1px 3px #0007">↑</div>',iconSize:[17,17],iconAnchor:[8,8]})}).addTo(directionArrows);
 }};
 
-const suggested=[{name:'PR-M 41 · Lagunas y Belvís del Jarama',url:'https://grupoamadablan.org/storage/tracks_gpx/pr-m_41_lagunas_belvis_jarama.gpx',source:'https://grupoamadablan.org/rutas_detalle/160/lagunas-y-belvis-del-jarama'},{name:'Arco Verde · Vega del Jarama',url:'https://www.comunidad.madrid/docs/2026-05/rl1-v2.gpx',source:'https://www.comunidad.madrid/medio-ambiente/arco-verde'}];
-function renderSuggested(){let el=$('suggestedRoutes');el.innerHTML='';suggested.forEach(item=>{const row=document.createElement('div');row.className='route-row';row.innerHTML='<div class="grow"><strong>'+item.name+'</strong><span class="muted">Ruta externa · archivo GPX original</span></div><button class="mini" type="button">Añadir</button><a class="mini" target="_blank" rel="noopener noreferrer" href="'+item.source+'">Fuente</a>';row.querySelector('button').onclick=async()=>{let button=row.querySelector('button');button.disabled=true;button.textContent='Cargando…';try{let response=await fetch(item.url);if(!response.ok)throw Error('HTTP '+response.status);let paths=parseGPX(await response.text());if(routes.some(r=>r.name===item.name)){status('Esta ruta ya figura en tu biblioteca.');return}let route={id:'recommended-'+Date.now()+'-'+Math.random(),name:item.name,paths};routes.unshift(route);if(persist()){renderRoutes();showRoute(route.id);status('Ruta añadida: '+item.name)}}catch(err){status('Este servidor no permite importar automáticamente desde otra web. Se abrirá el GPX: descárgalo y usa «Importar GPX».');window.open(item.url,'_blank','noopener,noreferrer')}finally{button.disabled=false;button.textContent='Añadir'}};el.appendChild(row)})}
+// PR-M 41 ampliada: combina exclusivamente geometrías GPX publicadas por Grupo Amadablan.
+// La extensión de ribera es de ida y vuelta, sin atajos en línea recta ni carreteras inventadas.
+const TRACK_41='https://grupoamadablan.org/storage/tracks_gpx/pr-m_41_lagunas_belvis_jarama.gpx';
+const TRACK_40='https://www.grupoamadablan.org/storage/tracks_gpx/pr-m_40_circular_paracuellos_de_jarama.gpx';
+async function fetchTrack(url){const response=await fetch(url);if(!response.ok)throw Error('No se pudo descargar el GPX: '+response.status);const paths=parseGPX(await response.text());return paths.flat()}
+function createBelvisExtension(a,b){
+  if(a.length<30||b.length<30)throw Error('Tracks originales demasiado cortos');
+  // Priorizar el inicio o final del PR-M 41 y encontrar la unión verdadera con PR-M 40.
+  let best=null;
+  for(const edge of [0,a.length-1]){
+    for(let j=0;j<b.length;j++){const d=distance(a[edge],b[j]);if(!best||d<best.d)best={edge,j,d}}
+  }
+  if(best.d>120)throw Error('Los tracks oficiales no enlazan con suficiente precisión ('+Math.round(best.d)+' m). No se construye una ruta insegura.');
+  // Arrancamos por la PR-M 41 desde la unión, recorriendo todo el track.
+  const base=best.edge===0?a.slice().reverse():a.slice();
+  // Elegir el sentido hacia el sur del PR-M 40 (no hacia la subida de Paracuellos).
+  const j=best.j;let forward=b.slice(j,Math.min(b.length,j+70)),back=b.slice(Math.max(0,j-69),j+1).reverse();
+  const south=v=>v.length>5?v[Math.min(v.length-1,40)].lat-v[0].lat:Infinity;
+  const outward=south(forward)<south(back)?b.slice(j):b.slice(0,j+1).reverse();
+  if(outward.length<20 || outward[Math.min(outward.length-1,40)].lat>=outward[0].lat-0.0008)throw Error('No se pudo identificar el tramo de ribera hacia el sur.');
+  let extension=[outward[0]],m=0;
+  for(let k=1;k<outward.length;k++){
+    const seg=distance(outward[k-1],outward[k]);
+    if(seg>130)throw Error('El track PR-M 40 contiene una discontinuidad. No se construye el recorrido.');
+    if(m+seg>6400)break;
+    extension.push(outward[k]);m+=seg;
+    // Detenernos antes del tramo de ascenso hacia el casco urbano.
+    if(outward[k].lat<40.479)break;
+  }
+  if(m<1800)throw Error('No se ha encontrado un tramo de ribera suficientemente largo.');
+  // La PR-M 41 puede terminar a pocos metros de la unión; volver al punto inicial.
+  const closure=distance(base[base.length-1],extension[0]);
+  if(closure>120)throw Error('El enlace entre ambas rutas no es continuo ('+Math.round(closure)+' m).');
+  const combined=base.concat(extension,extension.slice(0,-1).reverse());
+  const total=analyze([combined]).km;
+  if(total<9000||total>28000)throw Error('Longitud inesperada: '+fmt(total)+'.');
+  return [combined];
+}
+const suggested=[{name:'PR-M 41 ampliada · Lagunas + ribera del Jarama',kind:'belvis-extension',source:'https://www.grupoamadablan.org/rutas_detalle/159/rutas'},{name:'PR-M 41 · Lagunas y Belvís del Jarama',url:'https://grupoamadablan.org/storage/tracks_gpx/pr-m_41_lagunas_belvis_jarama.gpx',source:'https://grupoamadablan.org/rutas_detalle/160/lagunas-y-belvis-del-jarama'},{name:'Arco Verde · Vega del Jarama',url:'https://www.comunidad.madrid/docs/2026-05/rl1-v2.gpx',source:'https://www.comunidad.madrid/medio-ambiente/arco-verde'}];
+function renderSuggested(){let el=$('suggestedRoutes');el.innerHTML='';suggested.forEach(item=>{const row=document.createElement('div');row.className='route-row';row.innerHTML='<div class="grow"><strong>'+item.name+'</strong><span class="muted">'+(item.kind==='belvis-extension'?'Combinación de tracks oficiales · ribera ida y vuelta · comprobar antes de salir':'Ruta externa · archivo GPX original')+'</span></div><button class="mini" type="button">Añadir</button><a class="mini" target="_blank" rel="noopener noreferrer" href="'+item.source+'">Fuente</a>';row.querySelector('button').onclick=async()=>{let button=row.querySelector('button');button.disabled=true;button.textContent='Cargando…';try{let paths=item.kind==='belvis-extension'?createBelvisExtension(await fetchTrack(TRACK_41),await fetchTrack(TRACK_40)):await fetchTrack(item.url).then(p=>[p]);if(routes.some(r=>r.name===item.name)){status('Esta ruta ya figura en tu biblioteca.');return}let route={id:'recommended-'+Date.now()+'-'+Math.random(),name:item.name,paths};routes.unshift(route);if(persist()){renderRoutes();showRoute(route.id);status('Ruta añadida: '+item.name)}}catch(err){status('Este servidor no permite importar automáticamente desde otra web. Se abrirá el GPX: descárgalo y usa «Importar GPX».');if(item.url)window.open(item.url,'_blank','noopener,noreferrer');else status('No se pudo generar la ampliación: '+err.message+' Comprueba la conexión y prueba de nuevo.')}finally{button.disabled=false;button.textContent='Añadir'}};el.appendChild(row)})}
 renderSuggested();
 </script><script type="module" src="./community.js"></script></body></html>
