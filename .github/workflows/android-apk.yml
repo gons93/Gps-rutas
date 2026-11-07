@@ -29,8 +29,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: SDK Android
-        uses: android-actions/setup-android@v3
+      - name: SDK Android preinstalado
+        run: |
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          test -d "${ANDROID_HOME}" || { echo "El runner no tiene SDK Android"; exit 1; }
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --version || true
       - name: Preparar Capacitor
         run: |
           npm install --no-audit --no-fund
