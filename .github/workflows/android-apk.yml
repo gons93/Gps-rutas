@@ -8,6 +8,7 @@ on:
       - 'community.js'
       - 'firebase-config.js'
       - 'assets/gps-rutas-icon.svg'
+      - 'tracks/**'
       - 'package.json'
       - 'capacitor.config.json'
       - 'scripts/**'
@@ -34,6 +35,40 @@ jobs:
           echo "ANDROID_HOME=${ANDROID_HOME}"
           test -d "${ANDROID_HOME}" || { echo "El runner no tiene SDK Android"; exit 1; }
           "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --version || true
+      - name: Incluir rutas GPX originales en la APK
+        run: |
+          mkdir -p tracks
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          from xml.etree import ElementTree as ET
+          from time import sleep
+          tracks = {
+              "pr-m-41.gpx": ("https://www.grupoamadablan.org/storage/tracks_gpx/pr-m_41_lagunas_belvis_jarama.gpx", True),
+              "pr-m-40.gpx": ("https://www.grupoamadablan.org/storage/tracks_gpx/pr-m_40_circular_paracuellos_de_jarama.gpx", True),
+              "arco-verde.gpx": ("https://www.comunidad.madrid/docs/2026-05/rl1-v2.gpx", False),
+          }
+          for filename, (url, required) in tracks.items():
+              try:
+                  data = None
+                  for i in range(3):
+                      try:
+                          request = Request(url, headers={"User-Agent": "Mozilla/5.0 GPS-Rutas/1.0", "Accept": "application/gpx+xml,application/xml,*/*"})
+                          with urlopen(request, timeout=25) as response:
+                              data = response.read()
+                          break
+                      except Exception:
+                          if i == 2: raise
+                          sleep(2)
+                  root = ET.fromstring(data)
+                  points = root.findall(".//{*}trkpt") or root.findall(".//{*}rtept")
+                  if len(points) < 30: raise ValueError("GPX sin suficientes puntos")
+                  Path("tracks", filename).write_bytes(data)
+                  print(filename, "descargada con", len(points), "puntos")
+              except Exception as exc:
+                  print("ERROR en", filename, str(exc))
+                  if required: raise
+          PY
       - name: Preparar Capacitor
         run: |
           npm install --no-audit --no-fund
