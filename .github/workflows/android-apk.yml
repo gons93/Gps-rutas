@@ -1,0 +1,85 @@
+name: Compilar GPS Rutas Android
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'index.html'
+      - 'community.js'
+      - 'firebase-config.js'
+      - 'assets/gps-rutas-icon.svg'
+      - 'package.json'
+      - 'capacitor.config.json'
+      - 'scripts/**'
+      - '.github/workflows/android-apk.yml'
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: SDK Android
+        uses: android-actions/setup-android@v3
+      - name: Preparar Capacitor
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+          npx cap add android
+          npx cap sync android
+      - name: Icono personalizado y pantalla encendida
+        run: |
+          python3 -m pip install --break-system-packages cairosvg pillow
+          python3 - <<'PY'
+          from pathlib import Path
+          import io
+          import cairosvg
+          from PIL import Image
+          svg=Path('assets/gps-rutas-icon.svg').read_bytes()
+          png=cairosvg.svg2png(bytestring=svg,output_width=512,output_height=512)
+          master=Image.open(io.BytesIO(png)).convert('RGBA')
+          res=Path('android/app/src/main/res')
+          for name,size in [('mdpi',48),('hdpi',72),('xhdpi',96),('xxhdpi',144),('xxxhdpi',192)]:
+              dest=res/('mipmap-'+name)
+              dest.mkdir(parents=True,exist_ok=True)
+              icon=master.resize((size,size),Image.Resampling.LANCZOS)
+              icon.save(dest/'ic_launcher.png')
+              icon.save(dest/'ic_launcher_round.png')
+              icon.save(dest/'ic_launcher_foreground.png')
+          mains=list(Path('android/app/src/main/java').rglob('MainActivity.java'))
+          assert len(mains)==1, 'No se encontró una MainActivity única'
+          main=mains[0]
+          src=main.read_text()
+          needle='public class MainActivity extends BridgeActivity {'
+          assert needle in src, 'Formato de MainActivity inesperado'
+          src=src.replace(needle,needle+'''
+              @Override public void onCreate(android.os.Bundle state) {
+                super.onCreate(state);
+                getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+              }
+          ''')
+          main.write_text(src)
+          print('Iconos instalados y FLAG_KEEP_SCREEN_ON activo.')
+          PY
+      - name: Compilar APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - name: Publicar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: GPS-Rutas-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+          if-no-files-found: error
